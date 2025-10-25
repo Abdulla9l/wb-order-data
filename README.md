@@ -19,4 +19,10 @@
 - **HTTP Router:** Gorilla Mux
 - **Frontend:** JavaScript + HTML
 
-## Команды makefile
+## Команды 
+make migrate      
+make run           
+make producer     
+make test          
+make migrate       
+

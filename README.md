@@ -23,5 +23,11 @@
 - make run           
 - make producer     
 - make test          
-- make migrate       
+- make migrate
+
+  ##  API Endpoints
+
+### Получить заказ по ID
+```http
+GET /order/{id}
 

@@ -1,57 +1,70 @@
 package main
 
 import (
+	"context"
 	"log"
-	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 	"wb-order-data/internal/cache"
 	"wb-order-data/internal/kafka"
-	"wb-order-data/internal/models"
+	"wb-order-data/internal/repository"
+	"wb-order-data/internal/server"
 	"wb-order-data/internal/service"
 )
 
 func main() {
-	// Создаём кэш
-	orderCache := cache.NewOrderCache()
+	kafkaBrokers := []string{"localhost:9092"}
+	kafkaTopic := "orders"
+	consumerGroupID := "order-service-group"
 
-	// Создаём сервис (пока без DB)
-	orderService := service.NewOrderService(orderCache)
-
-	// Запускаем продюсера (генерация тестовых заказов)
-	producer := kafka.NewProducer(orderService)
-	go producer.Start()
-
-	// Запускаем consumer (имитация получения заказов)
-	consumer := kafka.NewConsumer(orderService)
-	go consumer.Start()
-
-	// HTTP хэндлер для получения заказа по ID
-	http.HandleFunc("/order", func(w http.ResponseWriter, r *http.Request) {
-		id := r.URL.Query().Get("id")
-		if id == "" {
-			http.Error(w, "id required", http.StatusBadRequest)
-			return
-		}
-
-		order, ok := orderCache.Get(id)
-		if !ok {
-			http.Error(w, "order not found", http.StatusNotFound)
-			return
-		}
-
-		data, err := models.MarshalOrder(order)
-		if err != nil {
-			http.Error(w, "failed to marshal order", http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
-	})
-
-	port := ":8081"
-	log.Printf("HTTP server started on %s", port)
-	if err := http.ListenAndServe(port, nil); err != nil {
-		log.Fatalf("HTTP server failed: %v", err)
+	db, err := repository.Connect()
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
 	}
+	defer db.Close()
+
+	orderRepo := repository.NewOrderRepository(db)
+
+	orderCache := cache.NewOrderCache(10)
+
+	orderService := service.NewOrderService(orderRepo, orderCache)
+
+	log.Println("Restoring cache from database...")
+	if err := orderService.RestoreCacheFromDB(); err != nil {
+		log.Printf("Warning: failed to restore cache: %v", err)
+	} else {
+		log.Println("Cache successfully restored from database")
+	}
+
+	kafkaConsumer := kafka.NewConsumer(kafkaBrokers, kafkaTopic, consumerGroupID, orderService)
+	defer kafkaConsumer.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		kafkaConsumer.Start(ctx)
+	}()
+
+	httpServer := server.NewHTTPServer(orderService)
+
+	go func() {
+		log.Println("Starting HTTP server on :8080")
+		if err := httpServer.Start(":8080"); err != nil {
+			log.Fatal("Failed to start HTTP server:", err)
+		}
+	}()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+
+	log.Println("Shutting down server...")
+
+	cancel()
+	time.Sleep(2 * time.Second)
+
+	log.Println("Server stopped")
 }

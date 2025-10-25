@@ -1,38 +1,38 @@
 package config
 
 import (
-	"log"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	DBUser     string
-	DBPassword string
-	DBName     string
-	DBHost     string
-	DBPort     string
-	DBSSLMode  string
-
-	KafkaBroker string
-	HTTPPort    string
+	KafkaBrokers  []string
+	KafkaTopic    string
+	ConsumerGroup string
+	DatabaseURL   string
+	HTTPPort      string
 }
 
-func LoadConfig() *Config {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, reading from environment")
-	}
-
+func Load() *Config {
 	return &Config{
-		DBUser:     os.Getenv("DB_USER"),
-		DBPassword: os.Getenv("DB_PASSWORD"),
-		DBName:     os.Getenv("DB_NAME"),
-		DBHost:     os.Getenv("DB_HOST"),
-		DBPort:     os.Getenv("DB_PORT"),
-		DBSSLMode:  os.Getenv("DB_SSLMODE"),
-
-		KafkaBroker: os.Getenv("KAFKA_BROKER"),
-		HTTPPort:    os.Getenv("HTTP_PORT"),
+		KafkaBrokers:  getEnvAsSlice("KAFKA_BROKERS", []string{"localhost:9092"}, ","),
+		KafkaTopic:    getEnv("KAFKA_TOPIC", "orders"),
+		ConsumerGroup: getEnv("KAFKA_CONSUMER_GROUP", "order-service"),
+		DatabaseURL:   getEnv("DATABASE_URL", "postgres://user:password@localhost:5432/ordersdb"),
+		HTTPPort:      getEnv("HTTP_PORT", "8080"),
 	}
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvAsSlice(key string, defaultValue []string, separator string) []string {
+	if value := os.Getenv(key); value != "" {
+		var result []string
+		return result
+	}
+	return defaultValue
 }

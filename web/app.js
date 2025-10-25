@@ -8,11 +8,12 @@ document.addEventListener("DOMContentLoaded", function () {
         const orderId = input.value.trim();
         if (!orderId) return;
         try {
-            const response = await fetch(`/order?id=${orderId}`);
+            const response = await fetch(`/order/${orderId}`);
             const order = await response.json();
-            resultDiv.textContent = JSON.stringify(order, null, 2);
+            resultDiv.innerHTML = `<pre>${JSON.stringify(order, null, 2)}</pre>`;
         } catch {
             resultDiv.textContent = "Ошибка при получении заказа";
+            
         }
     });
 });
